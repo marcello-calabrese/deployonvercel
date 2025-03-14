@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0;">
+    <title>Portfolio Shares KPIs</title>
+    
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .stock-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+            margin-bottom: 80px;
+        }
+        .stock-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 15px;
+            width: 100%;
+        }
+        /* Special styling for the 7th card to center it */
+        .stock-card:nth-child(7) {
+            grid-column: 2;
+        }
+        .stock-header {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .stock-name {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .stock-price {
+            font-size: 18px;
+        }
+        .kpi-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            gap: 25px;
+        }
+        .kpi-container {
+            flex: 1;
+            min-width: 120px;
+            height: 150px;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+        }
+        .error {
+            color: red;
+            text-align: center;
+            padding: 20px;
+        }
+        /* Add media query for responsive layout */
+        @media (max-width: 1000px) {
+            .stock-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .stock-card:nth-child(7) {
+                grid-column: 1 / span 2;
+                max-width: 75%;
+                margin: 0 auto;
+            }
+        }
+        @media (max-width: 576px) {
+            .stock-container {
+                grid-template-columns: 1fr;
+            }
+            .stock-card:nth-child(7) {
+                grid-column: 1;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Portfolio Performance KPIs</h1>
+        </div>
+        
+        <div id="portfolio">
+            <div class="loading">Loading portfolio data...</div>
+        </div>
+    </div>
+    
+    <script>
+        // API endpoint URL - change this to match your Flask server
+        const API_URL = 'http://127.0.0.1:5000/portfolio-performance';
+        
+        // Function to load portfolio data
+        async function loadPortfolioData() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch portfolio data');
+                }
+                
+                const data = await response.json();
+                
+                if (data.length === 0) {
+                    document.getElementById('portfolio').innerHTML = '<div class="error">No portfolio data available</div>';
+                    return;
+                }
+                
+                renderPortfolio(data);
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('portfolio').innerHTML = `<div class="error">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        // Function to render the portfolio
+        function renderPortfolio(stocks) {
+            const portfolioElement = document.getElementById('portfolio');
+            portfolioElement.innerHTML = '';
+            
+            // Create stock container
+            const stockContainer = document.createElement('div');
+            stockContainer.className = 'stock-container';
+            
+            // Create cards for each stock
+            stocks.forEach(stock => {
+                const stockCard = createStockCard(stock);
+                stockContainer.appendChild(stockCard);
+            });
+            
+            portfolioElement.appendChild(stockContainer);
+        }
+        
+        // Function to create a stock card
+        function createStockCard(stock) {
+            const stockCard = document.createElement('div');
+            stockCard.className = 'stock-card';
+            
+            // Create stock header
+            const stockHeader = document.createElement('div');
+            stockHeader.className = 'stock-header';
+            
+            const stockName = document.createElement('div');
+            stockName.className = 'stock-name';
+            stockName.textContent = `${stock.name} (${stock.ticker})`;
+            
+            const stockPrice = document.createElement('div');
+            stockPrice.className = 'stock-price';
+            stockPrice.textContent = `${stock.current_price}`;
+            
+            stockHeader.appendChild(stockName);
+            stockHeader.appendChild(stockPrice);
+            
+            // Create KPI row
+            const kpiRow = document.createElement('div');
+            kpiRow.className = 'kpi-row';
+            
+            // Define periods for KPIs
+            const periods = [
+                { key: '5_year', label: '5 Years' },
+                { key: '3_year', label: '3 Years' },
+                { key: '1_year', label: '1 Year' },
+                { key: 'ytd', label: 'YTD' },
+                { key: '1_month', label: '1 Month' }
+            ];
+            
+            // Create KPI containers for each period
+            periods.forEach(period => {
+                // Create a safe ID by removing special characters
+                const safeTickerId = stock.ticker.replace(/[^a-zA-Z0-9]/g, '_');
+                const containerId = `kpi-${safeTickerId}-${period.key}`;
+                
+                const kpiContainer = document.createElement('div');
+                kpiContainer.className = 'kpi-container';
+                kpiContainer.id = containerId;
+                kpiRow.appendChild(kpiContainer);
+                
+                // Get the performance value
+                const value = stock.performance[period.key];
+                
+                // Add the container to the DOM first
+                stockCard.appendChild(stockHeader);
+                stockCard.appendChild(kpiRow);
+                
+                // Delay creating the indicator to ensure the DOM element exists
+                setTimeout(() => {
+                    // Create KPI indicator
+                    if (value !== null) {
+                        createKpiIndicator(
+                            containerId,
+                            period.label,
+                            value
+                        );
+                    } else {
+                        document.getElementById(containerId).innerHTML = 
+                            `<div style="text-align:center;padding-top:50px">No data for ${period.label}</div>`;
+                    }
+                }, 0);
+            });
+            
+            return stockCard;
+        }
+        
+        // Function to create KPI indicator
+        function createKpiIndicator(containerId, title, value) {
+            // Check if element exists
+            const container = document.getElementById(containerId);
+            if (!container) {
+                console.error(`No element found with id: ${containerId}`);
+                return;
+            }
+            
+            // Determine color based on value
+            let color = 'gray';
+            if (value > 0) {
+                color = '#00b300'; // Green for positive
+            } else if (value < 0) {
+                color = '#cc0000'; // Red for negative
+            }
+            
+            const data = [{
+                domain: { x: [0, 1], y: [0, 1] },
+                value: value,
+                title: { text: title },
+                type: "indicator",
+                mode: "gauge+number",
+                gauge: {
+                    axis: { range: [-50, 100] },
+                    bar: { color: color },
+                    steps: [
+                        { range: [-50, 0], color: "rgba(204, 0, 0, 0.1)" },
+                        { range: [0, 100], color: "rgba(0, 179, 0, 0.1)" }
+                    ],
+                    threshold: {
+                        line: { color: "black", width: 1 },
+                        thickness: 0.75,
+                        value: 0
+                    }
+                },
+                number: {
+                    suffix: "%",
+                    font: {
+                        color: color
+                    }
+                }
+            }];
+
+            const layout = {
+                margin: { t: 25, b: 25, l: 25, r: 25 },
+                height: 150,
+                font: { size: 12 }
+            };
+
+            Plotly.newPlot(containerId, data, layout, { displayModeBar: false });
+        }
+        
+        // Load portfolio data when page loads
+        document.addEventListener('DOMContentLoaded', loadPortfolioData);
+    </script>
+    
+       
+  
+
+</body>
+</html>
